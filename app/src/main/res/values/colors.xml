@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="brand">#2F6F5E</color>
+    <color name="brand_dark">#1E4D40</color>
+    <color name="brand_soft">#E3F1EC</color>
+    <color name="surface">#F7F8F7</color>
+    <color name="card">#FFFFFF</color>
+    <color name="ink">#1B1F1E</color>
+    <color name="muted">#66706C</color>
+    <color name="warn">#B26A00</color>
+    <color name="warn_soft">#FFF3DC</color>
+    <color name="error">#B3261E</color>
+    <color name="ok">#2E7D32</color>
+    <color name="mic_recording">#C62828</color>
+    <color name="chart_grid">#E3E8E5</color>
+    <color name="chart_in_progress">#E9A23B</color>
+    <color name="chart_completed">#4C9A72</color>
+</resources>

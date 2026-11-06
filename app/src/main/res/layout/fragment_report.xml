@@ -1,0 +1,251 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <TextView
+            android:id="@+id/reportTitle"
+            style="@style/Tracker.Heading"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="24sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/reportSubtitle"
+            style="@style/Tracker.Muted"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp" />
+
+        <Spinner
+            android:id="@+id/monthSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="12dp" />
+
+        <LinearLayout
+            android:id="@+id/dateRangeControls"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/startDateButton"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_marginEnd="5dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:insetLeft="0dp"
+                android:insetRight="0dp"
+                android:maxLines="1"
+                android:minWidth="0dp"
+                android:paddingHorizontal="4dp"
+                android:textAllCaps="false"
+                android:textSize="12sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/endDateButton"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_marginStart="5dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:insetLeft="0dp"
+                android:insetRight="0dp"
+                android:maxLines="1"
+                android:minWidth="0dp"
+                android:paddingHorizontal="4dp"
+                android:textAllCaps="false"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/periodControls"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <ImageButton
+                android:id="@+id/previousPeriodButton"
+                style="@style/Tracker.FilterIconButton"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_margin="0dp"
+                android:contentDescription="@string/previous_period"
+                android:src="@drawable/ic_arrow_left" />
+
+            <TextView
+                android:id="@+id/periodLabel"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:layout_weight="1"
+                android:paddingHorizontal="4dp"
+                android:textColor="@color/muted"
+                android:textSize="12sp"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <ImageButton
+                android:id="@+id/nextPeriodButton"
+                style="@style/Tracker.FilterIconButton"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_margin="0dp"
+                android:contentDescription="@string/next_period"
+                android:src="@drawable/ic_arrow_right" />
+        </LinearLayout>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/loadButton"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="8dp"
+            android:text="@string/load_activities" />
+
+        <TextView
+            android:id="@+id/reportStatus"
+            style="@style/Tracker.Muted"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp" />
+
+        <ProgressBar
+            android:id="@+id/reportProgress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="3dp"
+            android:indeterminate="true"
+            android:visibility="gone" />
+
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Tracker.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:id="@+id/reportCount"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/brand"
+                    android:textSize="22sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/reportTotal"
+                    style="@style/Tracker.Muted"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp" />
+
+                <TextView
+                    android:id="@+id/plannedStatusSummary"
+                    style="@style/Tracker.Muted"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp" />
+
+                <TextView
+                    android:id="@+id/inProgressStatusSummary"
+                    style="@style/Tracker.Muted"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp" />
+
+                <TextView
+                    android:id="@+id/completedStatusSummary"
+                    style="@style/Tracker.Muted"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp" />
+
+                <com.myproductivity.tracker.StatusChartView
+                    android:id="@+id/statusChart"
+                    android:layout_width="match_parent"
+                    android:layout_height="190dp"
+                    android:layout_marginTop="12dp"
+                    android:contentDescription="@string/status_chart_description" />
+
+                <HorizontalScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:fillViewport="false"
+                    android:scrollbars="none">
+
+                    <LinearLayout
+                        android:id="@+id/filterButtons"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:orientation="horizontal">
+
+                        <ImageButton
+                            android:id="@+id/dateFilterButton"
+                            style="@style/Tracker.FilterIconButton"
+                            android:contentDescription="@string/date_filter"
+                            android:src="@drawable/ic_today" />
+
+                        <ImageButton
+                            android:id="@+id/categoryFilterButton"
+                            style="@style/Tracker.FilterIconButton"
+                            android:contentDescription="@string/category_filter_all"
+                            android:src="@drawable/ic_category" />
+
+                        <ImageButton
+                            android:id="@+id/statusFilterButton"
+                            style="@style/Tracker.FilterIconButton"
+                            android:contentDescription="@string/status_filter_all"
+                            android:src="@drawable/ic_status" />
+
+                        <ImageButton
+                            android:id="@+id/priorityFilterButton"
+                            style="@style/Tracker.FilterIconButton"
+                            android:contentDescription="@string/priority_filter_all"
+                            android:src="@drawable/ic_priority" />
+
+                        <ImageButton
+                            android:id="@+id/plannedTimeFilterButton"
+                            style="@style/Tracker.FilterIconButton"
+                            android:contentDescription="@string/planned_time_filter"
+                            android:src="@drawable/ic_timer" />
+
+                        <ImageButton
+                            android:id="@+id/clearFiltersButton"
+                            style="@style/Tracker.FilterIconButton"
+                            android:contentDescription="@string/clear_filters"
+                            android:src="@drawable/ic_filter_clear" />
+                    </LinearLayout>
+                </HorizontalScrollView>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <LinearLayout
+            android:id="@+id/reportList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="vertical" />
+    </LinearLayout>
+</ScrollView>
