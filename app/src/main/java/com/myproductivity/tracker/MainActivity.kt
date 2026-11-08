@@ -17,6 +17,8 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         binding.root.applySystemBarsPadding()
+        ReminderScheduler.scheduleAllActivities(this)
+        ReminderScheduler.scheduleDaily(this)
 
         selectedTab = savedInstanceState?.getInt(STATE_SELECTED_TAB) ?: R.id.nav_today
         binding.bottomNavigation.selectedItemId = selectedTab

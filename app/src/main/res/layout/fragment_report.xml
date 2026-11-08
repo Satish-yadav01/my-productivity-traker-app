@@ -153,6 +153,14 @@
                     android:textStyle="bold" />
 
                 <TextView
+                    style="@style/Tracker.Heading"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/report_time_totals_title"
+                    android:textSize="16sp" />
+
+                <TextView
                     android:id="@+id/reportTotal"
                     style="@style/Tracker.Muted"
                     android:layout_width="wrap_content"
@@ -160,31 +168,33 @@
                     android:layout_marginTop="2dp" />
 
                 <TextView
-                    android:id="@+id/plannedStatusSummary"
-                    style="@style/Tracker.Muted"
+                    style="@style/Tracker.Heading"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp" />
+                    android:layout_marginTop="12dp"
+                    android:text="@string/report_category_breakdown_title"
+                    android:textSize="16sp" />
+
+                <LinearLayout
+                    android:id="@+id/categoryBreakdown"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:orientation="vertical" />
 
                 <TextView
-                    android:id="@+id/inProgressStatusSummary"
-                    style="@style/Tracker.Muted"
+                    style="@style/Tracker.Heading"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp" />
-
-                <TextView
-                    android:id="@+id/completedStatusSummary"
-                    style="@style/Tracker.Muted"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp" />
+                    android:layout_marginTop="12dp"
+                    android:text="@string/report_status_breakdown_title"
+                    android:textSize="16sp" />
 
                 <com.myproductivity.tracker.StatusChartView
                     android:id="@+id/statusChart"
                     android:layout_width="match_parent"
-                    android:layout_height="190dp"
-                    android:layout_marginTop="12dp"
+                    android:layout_height="150dp"
+                    android:layout_marginTop="4dp"
                     android:contentDescription="@string/status_chart_description" />
 
                 <HorizontalScrollView

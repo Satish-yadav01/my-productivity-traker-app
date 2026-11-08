@@ -1,8 +1,12 @@
 package com.myproductivity.tracker
 
 import android.graphics.Color
+import android.Manifest
+import android.app.TimePickerDialog
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.myproductivity.tracker.databinding.ActivitySettingsBinding
@@ -12,6 +16,16 @@ class SettingsActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivitySettingsBinding
     private lateinit var settings: SecureSettings
+    private var bedtimeMinutes = 0
+
+    private val notificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            show(
+                if (granted) "Bedtime reminder saved."
+                else "Bedtime reminder saved, but Android notifications are disabled.",
+                ok = granted
+            )
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -22,6 +36,35 @@ class SettingsActivity : AppCompatActivity() {
 
         binding.urlInput.setText(settings.apiUrl)
         binding.tokenInput.setText(settings.token)
+        bedtimeMinutes = ReminderScheduler.bedtimeMinutes(this)
+        binding.dailyReminderSwitch.isChecked = ReminderScheduler.dailyEnabled(this)
+        updateBedtimeLabel()
+        binding.bedtimeButton.setOnClickListener {
+            TimePickerDialog(
+                this,
+                { _, hour, minute ->
+                    bedtimeMinutes = hour * 60 + minute
+                    updateBedtimeLabel()
+                },
+                bedtimeMinutes / 60,
+                bedtimeMinutes % 60,
+                false
+            ).show()
+        }
+        binding.saveBedtimeButton.setOnClickListener {
+            ReminderScheduler.saveDailySettings(
+                this,
+                binding.dailyReminderSwitch.isChecked,
+                bedtimeMinutes
+            )
+            if (binding.dailyReminderSwitch.isChecked && Build.VERSION.SDK_INT >= 33 &&
+                !ReminderScheduler.notificationsAllowed(this)
+            ) {
+                notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                show("Bedtime reminder saved.", ok = true)
+            }
+        }
         binding.setupGuideButton.setOnClickListener {
             startActivity(Intent(this, SetupGuideActivity::class.java))
         }
@@ -67,5 +110,20 @@ class SettingsActivity : AppCompatActivity() {
     private fun show(text: String, ok: Boolean) {
         binding.resultText.setTextColor(if (ok) Color.parseColor("#2E7D32") else Color.parseColor("#B3261E"))
         binding.resultText.text = text
+    }
+
+    private fun updateBedtimeLabel() {
+        val hour = bedtimeMinutes / 60
+        val minute = bedtimeMinutes % 60
+        val displayHour = when {
+            hour % 12 == 0 -> 12
+            else -> hour % 12
+        }
+        binding.bedtimeButton.text = getString(
+            R.string.bedtime_time,
+            displayHour,
+            minute.toString().padStart(2, '0'),
+            if (hour < 12) "AM" else "PM"
+        )
     }
 }

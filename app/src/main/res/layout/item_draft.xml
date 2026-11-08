@@ -158,6 +158,28 @@
             android:layout_height="48dp"
             android:layout_marginTop="8dp" />
 
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/activityReminderSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:checked="true"
+            android:text="@string/activity_reminder" />
+
+        <TextView
+            android:id="@+id/reminderTimeLabel"
+            style="@style/Tracker.Muted"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp" />
+
+        <SeekBar
+            android:id="@+id/reminderDelaySeekBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="719"
+            android:progress="59" />
+
         <CheckBox
             android:id="@+id/duplicateCheck"
             android:layout_width="match_parent"

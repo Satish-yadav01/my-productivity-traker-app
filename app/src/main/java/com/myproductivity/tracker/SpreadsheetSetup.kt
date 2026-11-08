@@ -11,7 +11,8 @@ internal object SpreadsheetSetup {
     val activityHeaders = listOf(
         "Activity_ID", "Date", "Activity", "Category", "Priority",
         "Planned_Start", "Planned_End", "Planned_Duration_Min",
-        "Status", "Actual_Duration_Min", "Notes", "Created_At", "Updated_At"
+        "Status", "Actual_Duration_Min", "Notes", "Created_At", "Updated_At",
+        "Reminder_At"
     )
     val timeLogHeaders = listOf(
         "Log_ID", "Activity_ID", "Date", "Activity",

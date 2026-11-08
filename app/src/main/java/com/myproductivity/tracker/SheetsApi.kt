@@ -74,6 +74,7 @@ class SheetsApi(private val settings: SecureSettings) {
             .put("category", a.category)
             .put("priority", a.priority)
             .put("planned_duration_min", a.plannedMin ?: 0)
+            .put("reminder_at", a.reminderAt ?: "")
             .put("notes", marker(a))
         val r = call(ApiContract.ACTION_ADD, f) as? JSONObject
         return r?.optString("activity_id").orEmpty().ifEmpty {
@@ -129,6 +130,7 @@ class SheetsApi(private val settings: SecureSettings) {
             .put("priority", activity.priority)
             .put("status", activity.status)
             .put("planned_duration_min", activity.plannedMin ?: 0)
+            .put("reminder_at", activity.reminderAt ?: "")
         if (includeActual) fields.put("actual_duration_min", activity.actualMin ?: 0)
         call(ApiContract.ACTION_UPDATE, fields)
     }
@@ -153,7 +155,8 @@ class SheetsApi(private val settings: SecureSettings) {
             plannedMin = mins("planned_duration_min"),
             actualMin = mins("actual_duration_min"),
             priority = o.optString("priority").ifEmpty { "Medium" },
-            status = o.optString("status").ifEmpty { "Planned" }
+            status = o.optString("status").ifEmpty { "Planned" },
+            reminderAt = o.optString("reminder_at").takeIf { it.isNotBlank() }
         )
     }
 
@@ -271,7 +274,11 @@ class SheetsApi(private val settings: SecureSettings) {
  * If a reply is lost after "add", the retry first looks for its own marker in the sheet
  * so it cannot create a second row. Your dashboards are formulas, so they update by themselves.
  */
-class SaveCoordinator(private val api: SheetsApi, private val store: PendingStore) {
+class SaveCoordinator(
+    private val api: SheetsApi,
+    private val store: PendingStore,
+    private val reminderContext: android.content.Context? = null
+) {
 
     data class Result(val saved: Int, val stillPending: Int, val firstError: String?, val dashboardOk: Boolean)
 
@@ -290,6 +297,9 @@ class SaveCoordinator(private val api: SheetsApi, private val store: PendingStor
                     // lastError != null means an earlier attempt may have succeeded unnoticed
                     val id = (if (cur.lastError != null) api.findExisting(cur.activity) else null)
                         ?: api.addActivity(cur.activity)
+                    reminderContext?.let {
+                        ReminderScheduler.linkServerId(it, cur.activity.clientId, id)
+                    }
                     cur = cur.copy(serverId = id, lastError = null)
                     store.update(cur)
                 }

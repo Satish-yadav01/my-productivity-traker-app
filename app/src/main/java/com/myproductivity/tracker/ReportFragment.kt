@@ -12,6 +12,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.myproductivity.tracker.databinding.FragmentReportBinding
 import com.myproductivity.tracker.databinding.ItemActivityBinding
+import com.myproductivity.tracker.databinding.ItemReportCategoryBinding
 import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
@@ -406,9 +407,7 @@ class ReportFragment : Fragment(R.layout.fragment_report) {
                 binding.reportStatus.text = e.message ?: getString(R.string.report_failed)
                 binding.reportCount.text = ""
                 binding.reportTotal.text = ""
-                binding.plannedStatusSummary.text = ""
-                binding.inProgressStatusSummary.text = ""
-                binding.completedStatusSummary.text = ""
+                binding.categoryBreakdown.removeAllViews()
                 binding.statusChart.setData(emptyList(), emptyList())
                 binding.reportList.removeAllViews()
             } finally {
@@ -428,36 +427,39 @@ class ReportFragment : Fragment(R.layout.fragment_report) {
         )
         val totalPlannedMinutes = activities.sumOf { it.plannedMin ?: 0 }
         val totalActualMinutes = activities.sumOf { it.actualMin ?: 0 }
-        val categories = activities.groupingBy { it.category.ifBlank { getString(R.string.no_category) } }
-            .eachCount()
-            .entries
-            .sortedByDescending { it.value }
-            .joinToString(" · ") { "${it.key}: ${it.value}" }
-        binding.reportTotal.text = buildString {
-            append(getString(R.string.report_planned_time, formatMinutes(totalPlannedMinutes)))
-            append("\n")
-            append(getString(R.string.report_actual_time, formatMinutes(totalActualMinutes)))
-            if (categories.isNotBlank()) append("\n").append(categories)
-        }
+        binding.reportTotal.text = getString(
+            R.string.report_time_totals,
+            formatMinutes(totalPlannedMinutes),
+            formatMinutes(totalActualMinutes)
+        )
+        binding.categoryBreakdown.removeAllViews()
+        activities
+            .groupBy { it.category.ifBlank { getString(R.string.no_category) } }
+            .toSortedMap(String.CASE_INSENSITIVE_ORDER)
+            .forEach { (category, categoryActivities) ->
+                val categoryItem = ItemReportCategoryBinding.inflate(
+                    layoutInflater,
+                    binding.categoryBreakdown,
+                    false
+                )
+                categoryItem.categoryName.text = category
+                categoryItem.categoryCount.text = resources.getQuantityString(
+                    R.plurals.report_activity_count,
+                    categoryActivities.size,
+                    categoryActivities.size
+                )
+                categoryItem.plannedTime.text = formatMinutes(
+                    categoryActivities.sumOf { it.plannedMin ?: 0 }
+                )
+                categoryItem.actualTime.text = formatMinutes(
+                    categoryActivities.sumOf { it.actualMin ?: 0 }
+                )
+                binding.categoryBreakdown.addView(categoryItem.root)
+            }
 
         val planned = activities.filter { it.status.equals(Config.STATUS_PLANNED, ignoreCase = true) }
         val inProgress = activities.filter { it.status.equals(Config.STATUS_IN_PROGRESS, ignoreCase = true) }
         val completed = activities.filter { it.status.equals(Config.STATUS_COMPLETED, ignoreCase = true) }
-        binding.plannedStatusSummary.text = statusSummary(
-            getString(R.string.planned_status),
-            planned.size,
-            planned.sumOf { it.plannedMin ?: 0 }
-        )
-        binding.inProgressStatusSummary.text = statusSummary(
-            getString(R.string.in_progress_status),
-            inProgress.size,
-            inProgress.sumOf { it.plannedMin ?: 0 }
-        )
-        binding.completedStatusSummary.text = statusSummary(
-            getString(R.string.completed_status),
-            completed.size,
-            completed.sumOf { it.plannedMin ?: 0 }
-        )
         binding.statusChart.setData(
             listOf(
                 getString(R.string.planned_status),
@@ -480,6 +482,7 @@ class ReportFragment : Fragment(R.layout.fragment_report) {
         sorted.forEach { activity ->
             val item = ItemActivityBinding.inflate(layoutInflater, binding.reportList, false)
             item.itemName.text = activity.name
+            item.root.setCardBackgroundColor(requireContext().getColor(statusBackgroundColor(activity.status)))
             val date = displayDate(LocalDate.parse(activity.date))
             item.itemMeta.text = "$date · ${getString(R.string.tap_to_expand)}"
             item.itemPending.visibility = View.GONE
@@ -500,9 +503,6 @@ class ReportFragment : Fragment(R.layout.fragment_report) {
 
     private fun shortDate(date: LocalDate): String =
         date.format(DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH))
-
-    private fun statusSummary(label: String, count: Int, plannedMinutes: Int): String =
-        getString(R.string.status_summary, label, count, formatMinutes(plannedMinutes))
 
     companion object {
         const val MODE_RANGE = "range"

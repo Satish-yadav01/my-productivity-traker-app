@@ -9,7 +9,8 @@ const CONFIG = {
 const ACTIVITY_HEADERS = [
   "Activity_ID", "Date", "Activity", "Category", "Priority",
   "Planned_Start", "Planned_End", "Planned_Duration_Min",
-  "Status", "Actual_Duration_Min", "Notes", "Created_At", "Updated_At"
+  "Status", "Actual_Duration_Min", "Notes", "Created_At", "Updated_At",
+  "Reminder_At"
 ];
 
 const TIME_LOG_HEADERS = [
@@ -20,7 +21,21 @@ const TIME_LOG_HEADERS = [
 function setupWorkbook() {
   const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
   ensureSheet_(ss, "Activities", ACTIVITY_HEADERS);
+  const activities = ss.getSheetByName("Activities");
+  if (activities) ensureReminderColumn_(activities);
   ensureSheet_(ss, "Time_Log", TIME_LOG_HEADERS);
+}
+
+function ensureReminderColumn_(sheet) {
+  const width = Math.max(sheet.getLastColumn(), 1);
+  const headers = sheet.getRange(1, 1, 1, width).getValues()[0]
+    .map(value => String(value).trim());
+  if (!headers.includes("Reminder_At")) {
+    const column = width + 1;
+    sheet.getRange(1, column).setValue("Reminder_At");
+    sheet.getRange(1, column).setFontWeight("bold");
+    sheet.setColumnWidth(column, 22 * 7);
+  }
 }
 
 function ensureSheet_(ss, name, headers) {
@@ -39,6 +54,8 @@ function doPost(e) {
       throw new Error("Unauthorized");
     }
     const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const activities = ss.getSheetByName("Activities");
+    if (activities) ensureReminderColumn_(activities);
     return jsonResponse({ success: true, result: handleAction(ss, body) });
   } catch (err) {
     return jsonResponse({ success: false, error: String(err.message || err) });
@@ -52,20 +69,27 @@ function handleAction(ss, body) {
 
   if (action === "list_day") {
     if (activities.getLastRow() < 2) return [];
+    const headers = activities.getRange(1, 1, 1, activities.getLastColumn()).getValues()[0]
+      .map(value => String(value).trim());
     return activities.getDataRange().getValues().slice(1)
       .filter(row => normalizeDate(row[1]) === String(body.date))
-      .map(rowToObject);
+      .map(row => rowToObject(row, headers));
   }
 
   if (action === "add") {
     validateActivity(body);
     const now = new Date();
     const id = Utilities.getUuid();
-    activities.appendRow([
+    const headers = activities.getRange(1, 1, 1, activities.getLastColumn()).getValues()[0]
+      .map(value => String(value).trim());
+    const newRow = new Array(headers.length).fill("");
+    [
       id, body.date, body.activity, body.category, body.priority || "Medium",
       "", "", Number(body.planned_duration_min || 0), "Planned", 0,
       body.notes || "", now, now
-    ]);
+    ].forEach((value, index) => newRow[index] = value);
+    newRow[headers.indexOf("Reminder_At")] = body.reminder_at || "";
+    activities.appendRow(newRow);
     return { activity_id: id, status: "Planned" };
   }
 
@@ -85,6 +109,8 @@ function handleAction(ss, body) {
         actual_duration_min: 10,
         notes: 11
       };
+      columns.reminder_at = activities.getRange(1, 1, 1, activities.getLastColumn())
+        .getValues()[0].map(value => String(value).trim()).indexOf("Reminder_At") + 1;
       Object.keys(columns).forEach(key => {
         if (body[key] !== undefined) activities.getRange(row, columns[key]).setValue(body[key]);
       });
@@ -156,7 +182,8 @@ function findActivityRow(sheet, id) {
   return index < 0 ? null : index + 2;
 }
 
-function rowToObject(row) {
+function rowToObject(row, headers) {
+  const reminderColumn = headers ? headers.indexOf("Reminder_At") : 13;
   return {
     activity_id: String(row[0] || ""),
     date: normalizeDate(row[1]),
@@ -166,7 +193,8 @@ function rowToObject(row) {
     planned_duration_min: Number(row[7] || 0),
     status: String(row[8] || "Planned"),
     actual_duration_min: Number(row[9] || 0),
-    notes: String(row[10] || "")
+    notes: String(row[10] || ""),
+    reminder_at: String(row[reminderColumn] || "")
   };
 }
 

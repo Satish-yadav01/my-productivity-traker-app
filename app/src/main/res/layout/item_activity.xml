@@ -28,8 +28,6 @@
                 android:id="@+id/itemName"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:ellipsize="end"
-                android:maxLines="1"
                 android:textColor="@color/ink"
                 android:textSize="16sp"
                 android:textStyle="bold" />
@@ -42,6 +40,16 @@
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:layout_marginTop="2dp" />
+
+            <TextView
+                android:id="@+id/itemReminder"
+                style="@style/Tracker.Muted"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:textColor="@color/brand"
+                android:textSize="12sp"
+                android:visibility="gone" />
 
             <TextView
                 android:id="@+id/itemDetails"

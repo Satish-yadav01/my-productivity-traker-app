@@ -3,14 +3,17 @@ package com.myproductivity.tracker
 import android.Manifest
 import android.app.DatePickerDialog
 import android.content.Intent
+import android.net.Uri
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.provider.Settings
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
 import android.view.WindowManager
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
+import android.widget.SeekBar
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -40,11 +43,23 @@ class ConfirmActivity : AppCompatActivity(), SpeechController.Listener {
     private val drafts = mutableListOf<Draft>()
     private var saving = false
     private var listening = false
+    private var speechBaseText = ""
+    private var allowReminderScheduling = true
 
     private val micPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (granted) speech.start()
             else showStatus("Microphone permission denied. You can still type your activities.")
+        }
+
+    private val notificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            allowReminderScheduling = granted
+            if (granted) requestExactAlarmsOrSave() else saveConfirmedActivities()
+        }
+    private val exactAlarmPermission =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            saveConfirmedActivities()
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -54,13 +69,21 @@ class ConfirmActivity : AppCompatActivity(), SpeechController.Listener {
         binding.root.applySystemBarsPadding()
 
         store = PendingStore(this)
-        coordinator = SaveCoordinator(SheetsApi(SecureSettings(this)), store)
+        coordinator = SaveCoordinator(SheetsApi(SecureSettings(this)), store, this)
         speech = SpeechController(this, this)
 
-        binding.retryMicButton.setOnClickListener {
-            if (listening) speech.finishListening() else startListening()
+        binding.understandButton.setOnClickListener {
+            if (listening) {
+                binding.understandButton.isEnabled = false
+                showStatus(getString(R.string.finishing_listening))
+                speech.finishListening {
+                    binding.understandButton.isEnabled = true
+                    parseTranscript()
+                }
+            } else {
+                parseTranscript()
+            }
         }
-        binding.understandButton.setOnClickListener { parseTranscript() }
         binding.addBlankButton.visibility = View.VISIBLE
         binding.addBlankButton.setOnClickListener { addDraft(blankParsed()) }
         binding.saveAllButton.setOnClickListener { save() }
@@ -96,6 +119,8 @@ class ConfirmActivity : AppCompatActivity(), SpeechController.Listener {
     // ------------------------------------------------------------------ speech
 
     private fun startListening() {
+        speechBaseText = ""
+        setTranscript("")
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
             == PackageManager.PERMISSION_GRANTED
         ) speech.start()
@@ -104,23 +129,35 @@ class ConfirmActivity : AppCompatActivity(), SpeechController.Listener {
 
     override fun onListening(active: Boolean) {
         listening = active
-        binding.retryMicButton.text = if (active) "Stop" else getString(R.string.retry_mic)
-        if (active) showStatus(getString(R.string.listening))
+        if (active) {
+            showStatus(getString(R.string.listening))
+        } else if (binding.listenStatus.text == getString(R.string.listening)) {
+            binding.listenStatus.visibility = View.GONE
+        }
     }
 
     override fun onPartial(text: String) {
-        binding.transcriptInput.setText(text)
-        binding.transcriptInput.setSelection(text.length)
+        setTranscript(appendSpeech(speechBaseText, text))
     }
 
     override fun onFinal(text: String) {
-        binding.transcriptInput.setText(text)
-        binding.transcriptInput.setSelection(text.length)
-        binding.listenStatus.visibility = View.GONE
-        parseTranscript()
+        speechBaseText = appendSpeech(speechBaseText, text)
+        setTranscript(speechBaseText)
     }
 
     override fun onError(message: String) = showStatus(message)
+
+    private fun setTranscript(text: String) {
+        binding.transcriptInput.setText(text)
+        binding.transcriptInput.setSelection(text.length)
+    }
+
+    private fun appendSpeech(existing: String, spoken: String): String {
+        val addition = spoken.trim()
+        if (addition.isEmpty()) return existing
+        val prefix = existing.trimEnd()
+        return if (prefix.isEmpty()) addition else "$prefix\n$addition"
+    }
 
     private fun showStatus(text: String) {
         binding.listenStatus.text = text
@@ -191,7 +228,49 @@ class ConfirmActivity : AppCompatActivity(), SpeechController.Listener {
     private fun save() {
         if (saving) return                       // blocks double-taps
         if (!drafts.all { it.isValid() }) return
-        val activities = drafts.map { it.toActivity() }
+        val hasReminders = drafts.any { it.reminderEnabled && it.status != Config.STATUS_COMPLETED }
+        if (hasReminders &&
+            android.os.Build.VERSION.SDK_INT >= 33 &&
+            !ReminderScheduler.notificationsAllowed(this)
+        ) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            return
+        }
+        if (hasReminders) {
+            requestExactAlarmsOrSave()
+            return
+        }
+        saveConfirmedActivities()
+    }
+
+    private fun requestExactAlarmsOrSave() {
+        if (drafts.any { it.reminderEnabled && it.status != Config.STATUS_COMPLETED } &&
+            android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
+            !ReminderScheduler.canScheduleExactAlarms(this)
+        ) {
+            exactAlarmPermission.launch(
+                Intent(
+                    Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                    Uri.parse("package:$packageName")
+                )
+            )
+        } else {
+            saveConfirmedActivities()
+        }
+    }
+
+    private fun saveConfirmedActivities() {
+        if (saving) return
+        val activities = drafts.map { draft ->
+            val activity = draft.toActivity()
+            if (allowReminderScheduling && draft.reminderEnabled &&
+                draft.status != Config.STATUS_COMPLETED
+            ) {
+                ReminderScheduler.scheduleActivity(this, activity, draft.reminderDelayMinutes)
+            } else {
+                activity.copy(reminderAt = null)
+            }
+        }
         saving = true
         binding.saveAllButton.isEnabled = false
         binding.saveAllButton.text = "Saving…"
@@ -218,6 +297,15 @@ class ConfirmActivity : AppCompatActivity(), SpeechController.Listener {
                 message = "Couldn't finish saving (${e.message ?: "unexpected error"}). " +
                     "Your activities are kept on this phone and will retry."
             }
+            if (drafts.any { it.reminderEnabled && it.status != Config.STATUS_COMPLETED } &&
+                !ReminderScheduler.notificationsAllowed(this@ConfirmActivity)
+            ) {
+                message += " Allow notifications in Android settings to receive activity reminders."
+            } else if (drafts.any { it.reminderEnabled && it.status != Config.STATUS_COMPLETED } &&
+                !ReminderScheduler.canScheduleExactAlarms(this@ConfirmActivity)
+            ) {
+                message += " Enable Alarms & reminders for this app in Android settings for reminders at the selected time."
+            }
             setResult(RESULT_OK, Intent().putExtra(EXTRA_MESSAGE, message).putExtra(EXTRA_SUCCESS, ok))
             finish()
         }
@@ -232,6 +320,9 @@ class ConfirmActivity : AppCompatActivity(), SpeechController.Listener {
         var date: LocalDate = p.date
         var status: String = p.status
         var priority: String = p.priority
+        var reminderEnabled = p.status != Config.STATUS_COMPLETED
+        var reminderDelayMinutes = ReminderScheduler.defaultDelayMinutes(p.priority)
+        private var reminderDelayManuallyChanged = false
         var duplicate = false
         private val issues = p.issues.toMutableList()
 
@@ -259,6 +350,11 @@ class ConfirmActivity : AppCompatActivity(), SpeechController.Listener {
                 val v = Config.STATUSES[pos]
                 if (v != status) {
                     status = v
+                    if (status == Config.STATUS_COMPLETED) {
+                        reminderEnabled = false
+                        b.activityReminderSwitch.isChecked = false
+                    }
+                    updateReminderControls()
                     issues.removeAll { it.field == "status" }
                     revalidate()
                 }
@@ -267,8 +363,33 @@ class ConfirmActivity : AppCompatActivity(), SpeechController.Listener {
             b.prioritySpinner.adapter = adapter(Config.PRIORITIES)
             b.prioritySpinner.setSelection(Config.PRIORITIES.indexOf(priority).coerceAtLeast(0))
             b.prioritySpinner.onItemSelectedListener = selected { pos ->
-                priority = Config.PRIORITIES[pos]
+                val nextPriority = Config.PRIORITIES[pos]
+                if (nextPriority != priority) {
+                    priority = nextPriority
+                    if (!reminderDelayManuallyChanged) {
+                        reminderDelayMinutes = ReminderScheduler.defaultDelayMinutes(priority)
+                        b.reminderDelaySeekBar.progress = reminderDelayMinutes - 1
+                        updateReminderLabel()
+                    }
+                }
             }
+            b.activityReminderSwitch.isChecked = reminderEnabled
+            b.reminderDelaySeekBar.progress = reminderDelayMinutes / 15 - 1
+            b.activityReminderSwitch.setOnCheckedChangeListener { _, checked ->
+                reminderEnabled = checked
+                updateReminderControls()
+            }
+            b.reminderDelaySeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    reminderDelayMinutes = ReminderScheduler.delayForSeekProgress(progress)
+                    if (fromUser) reminderDelayManuallyChanged = true
+                    updateReminderLabel()
+                }
+
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            })
+            updateReminderControls()
 
             b.nameInput.addTextChangedListener(watcher {
                 if (name().isNotBlank()) issues.removeAll { it.field == "name" }
@@ -335,6 +456,26 @@ class ConfirmActivity : AppCompatActivity(), SpeechController.Listener {
             val f = DateTimeFormatter.ofPattern("EEE, d MMM yyyy", Locale.ENGLISH)
             val suffix = if (date == Config.today()) " (today)" else ""
             b.dateButton.text = "Date: ${date.format(f)}$suffix"
+        }
+
+        private fun updateReminderControls() {
+            val enabled = reminderEnabled && status != Config.STATUS_COMPLETED
+            b.activityReminderSwitch.isEnabled = status != Config.STATUS_COMPLETED
+            b.reminderDelaySeekBar.isEnabled = enabled
+            updateReminderLabel()
+        }
+
+        private fun updateReminderLabel() {
+            val reminderAt = java.time.Instant.ofEpochMilli(
+                System.currentTimeMillis() + reminderDelayMinutes * 60_000L
+            ).atZone(Config.ZONE)
+            b.reminderTimeLabel.text = getString(
+                R.string.reminder_in_at_time,
+                ReminderScheduler.formatDelay(reminderDelayMinutes),
+                reminderAt.format(DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH))
+            )
+            b.reminderTimeLabel.visibility =
+                if (reminderEnabled && status != Config.STATUS_COMPLETED) View.VISIBLE else View.GONE
         }
 
         private fun adapter(items: List<String>) =

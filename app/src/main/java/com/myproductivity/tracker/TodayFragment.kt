@@ -14,6 +14,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.time.Instant
+import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -58,12 +59,18 @@ class TodayFragment : Fragment(R.layout.fragment_today) {
         store = PendingStore(requireContext())
         cache = TodayCache(requireContext())
         api = SheetsApi(settings)
-        coordinator = SaveCoordinator(api, store)
+        coordinator = SaveCoordinator(api, store, requireContext())
 
         binding.micButton.setOnClickListener { openConfirm(autoListen = true) }
         binding.typeButton.setOnClickListener { openConfirm(autoListen = false) }
         binding.settingsButton.setOnClickListener {
             startActivity(Intent(requireContext(), SettingsActivity::class.java))
+        }
+        binding.totalTimeInfoButton.setOnClickListener {
+            AlertDialog.Builder(requireContext())
+                .setMessage(R.string.planned_time_info_message)
+                .setPositiveButton(android.R.string.ok, null)
+                .show()
         }
         binding.refresh.setOnRefreshListener { refresh() }
         binding.banner.setOnClickListener {
@@ -137,29 +144,62 @@ class TodayFragment : Fragment(R.layout.fragment_today) {
         binding.dateText.text = Config.today().format(DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.ENGLISH))
         binding.syncText.text = syncText
         binding.countText.text = list.size.toString()
-        binding.totalText.text = formatMinutes(list.sumOf { it.plannedMin ?: 0 }).let {
+        val personalActivities = list.filterNot {
+            it.category.trim().equals("Work", ignoreCase = true)
+        }
+        val personalPlannedMinutes = personalActivities.sumOf { it.plannedMin ?: 0 }
+        val personalActualMinutes = personalActivities.sumOf { it.actualMin ?: 0 }
+        binding.totalText.text = formatMinutes(personalPlannedMinutes).let {
+            if (it == "—") "0m" else it
+        }
+        binding.actualTotalText.text = formatMinutes(personalActualMinutes).let {
             if (it == "—") "0m" else it
         }
 
         val pendingItems = store.load()
         val pendingIds = pendingItems.flatMap { listOfNotNull(it.activity.clientId, it.serverId) }.toSet()
+        val activityReminders = ReminderStore(requireContext()).all()
         binding.listContainer.removeAllViews()
         for (activity in list) {
             val item = ItemActivityBinding.inflate(layoutInflater, binding.listContainer, false)
             item.itemName.text = activity.name
+            item.root.setCardBackgroundColor(requireContext().getColor(statusBackgroundColor(activity.status)))
             val isPending = activity.clientId in pendingIds
-            item.itemMeta.text = listOfNotNull(
-                getString(R.string.tap_to_expand),
+            val metaText = listOfNotNull(
+                activity.plannedMin?.let { getString(R.string.planned_time_short, formatMinutes(it)) },
                 getString(R.string.waiting_to_upload).takeIf { isPending }
             ).joinToString(" · ")
-            item.itemPending.visibility = View.GONE
-            item.root.setOnClickListener {
-                val expanded = item.itemDetails.visibility != View.VISIBLE
-                item.itemDetails.text = activityDetails(activity)
-                item.itemDetails.visibility = if (expanded) View.VISIBLE else View.GONE
-                item.itemMeta.text = if (expanded) getString(R.string.tap_to_collapse)
-                    else getString(R.string.tap_to_expand)
+            item.itemMeta.textSize = 12f
+            val reminder = activityReminders.firstOrNull {
+                it.activityId == activity.clientId || it.serverId == activity.clientId
             }
+            val reminderTime = when {
+                reminder != null && reminder.triggerAtMillis > System.currentTimeMillis() ->
+                    DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)
+                        .format(Instant.ofEpochMilli(reminder.triggerAtMillis).atZone(Config.ZONE))
+                else -> activity.reminderAt?.let(ReminderScheduler::formatReminderAt)
+            }
+            if (reminderTime != null) {
+                item.itemReminder.text = getString(R.string.remind_me_at, reminderTime)
+                item.itemReminder.visibility = View.VISIBLE
+            } else {
+                item.itemReminder.visibility = View.GONE
+            }
+            item.itemPending.visibility = View.GONE
+            val toggleDetails = {
+                val expanded = item.itemDetails.visibility != View.VISIBLE
+                val date = LocalDate.parse(activity.date)
+                    .format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
+                item.itemDetails.text = activityDetails(activity, date)
+                item.itemDetails.visibility = if (expanded) View.VISIBLE else View.GONE
+                val expandLabel = getString(if (expanded) R.string.tap_to_collapse else R.string.tap_to_expand)
+                item.itemMeta.text = listOfNotNull(metaText.takeIf { it.isNotBlank() }, expandLabel)
+                    .joinToString(" · ")
+            }
+            item.itemMeta.text = listOfNotNull(metaText.takeIf { it.isNotBlank() }, getString(R.string.tap_to_expand))
+                .joinToString(" · ")
+            item.root.setOnClickListener { toggleDetails() }
+            item.itemMeta.setOnClickListener { toggleDetails() }
             item.editButton.setOnClickListener {
                 editLauncher.launch(
                     Intent(requireContext(), EditActivity::class.java)
@@ -205,6 +245,8 @@ class TodayFragment : Fragment(R.layout.fragment_today) {
                             api.deleteActivity(serverId)
                         }
                         store.removeActivity(activity.clientId, serverId)
+                        ReminderScheduler.cancelActivity(requireContext(), activity.clientId)
+                        ReminderScheduler.cancelActivity(requireContext(), serverId)
                         cache.removeActivity(activity.date, activity.clientId, serverId, queued?.activity?.clientId)
                         Snackbar.make(binding.root, R.string.activity_deleted, Snackbar.LENGTH_LONG).show()
                         refresh()
@@ -225,6 +267,12 @@ class TodayFragment : Fragment(R.layout.fragment_today) {
     private fun clock(millis: Long): String =
         DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)
             .format(Instant.ofEpochMilli(millis).atZone(Config.ZONE))
+}
+
+internal fun statusBackgroundColor(status: String): Int = when (status.trim().lowercase(Locale.ROOT)) {
+    "completed" -> R.color.status_completed_bg
+    "in progress" -> R.color.status_in_progress_bg
+    else -> R.color.status_planned_bg
 }
 
 internal fun activityDetails(activity: Activity, dateLabel: String? = null): String = buildList {

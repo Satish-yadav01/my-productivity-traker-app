@@ -10,6 +10,8 @@ An Android app that turns a quick voice note or a few typed words about your day
 - **See your progress:** Browse Today, custom date ranges, weekly reports, and monthly reports. Reports include activity counts, planned and actual time, status summaries, charts, and category totals.
 - **Find the data you need:** Filter reports by date range, category, status, priority, and planned minutes.
 - **Keep working through connection problems:** Confirmed entries are saved in a phone-side queue and retried when the app is opened or refreshed. Recent duplicates are flagged, and retries are designed to avoid creating duplicate rows.
+- **Stay on top of activities:** Choose a reminder delay for each planned or in-progress activity (priority defaults are one hour, or two hours for low priority). Set a bedtime in Settings to get a daily summary two hours beforehand.
+- **Allow Android notifications:** On Android 12 and newer, grant the app **Alarms & reminders** access when prompted for activity reminders. Notifications must also be enabled for the app. Without exact-alarm access, Android may deliver a reminder late.
 - **Use your own data store:** The app connects directly to your Google Sheets workbook through Google Apps Script. There is no separate tracker account, hosted database, or paid app service.
 
 ## How it is different
@@ -59,6 +61,8 @@ The app's built-in setup guide walks through these steps. It generates a strong 
 5. **Add the script to the spreadsheet.** In the spreadsheet, choose **Extensions → Apps Script**. Replace the editor contents with the copied `Code.gs` and save. Select `setupWorkbook` in the function list, tap **Run**, and approve Google's requested permissions. This creates the `Activities` and `Time_Log` sheets and headers if they do not already exist.
 6. **Deploy as a web app.** In Apps Script, choose **Deploy → New deployment**, select **Web app**, set **Execute as** to **Me**, and set **Who has access** to **Anyone**. Deploy and approve the permissions, then copy the web app URL ending in `/exec`.
 7. **Connect the Android app.** Open **Settings** (or tap **Open connection settings** in the guide), paste the `/exec` URL, and confirm the generated API secret is already filled in. Tap **Save**, then **Test connection**.
+
+If you already connected an older script, replace it with the current `Code.gs`, run `setupWorkbook` once, and deploy a **new version**. The script adds a `Reminder_At` column at the end of the Activities sheet if it is missing; new and edited activity reminder times are written there.
 
 Keep the configured Apps Script private: it contains the API secret. The deployed endpoint requires the same secret for requests. The app stores the URL and secret encrypted on the phone, but a rooted or compromised device may expose local data. If you change the Apps Script code, deploy a **new version**. If you replace the secret, update the script and the app to use the matching value.
 

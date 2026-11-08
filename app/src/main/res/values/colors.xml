@@ -12,6 +12,9 @@
     <color name="error">#B3261E</color>
     <color name="ok">#2E7D32</color>
     <color name="mic_recording">#C62828</color>
+    <color name="status_completed_bg">#E8F5E9</color>
+    <color name="status_in_progress_bg">#FFF8E1</color>
+    <color name="status_planned_bg">#EEEEEE</color>
     <color name="chart_grid">#E3E8E5</color>
     <color name="chart_in_progress">#E9A23B</color>
     <color name="chart_completed">#4C9A72</color>

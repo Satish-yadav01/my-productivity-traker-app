@@ -71,13 +71,13 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginEnd="8dp"
-                    android:layout_weight="1">
+                    android:layout_weight="0.7">
 
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="vertical"
-                        android:padding="16dp">
+                        android:padding="12dp">
 
                         <TextView
                             android:id="@+id/countText"
@@ -101,28 +101,86 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="8dp"
-                    android:layout_weight="1">
+                    android:layout_weight="1.3">
 
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="vertical"
-                        android:padding="16dp">
+                        android:padding="12dp">
 
-                        <TextView
-                            android:id="@+id/totalText"
-                            android:layout_width="wrap_content"
+                        <LinearLayout
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:text="0m"
-                            android:textColor="@color/brand"
-                            android:textSize="32sp"
-                            android:textStyle="bold" />
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
 
-                        <TextView
-                            style="@style/Tracker.Muted"
-                            android:layout_width="wrap_content"
+                            <TextView
+                                style="@style/Tracker.Muted"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:maxLines="1"
+                                android:text="@string/planned_time_compact"
+                                android:textSize="12sp" />
+
+                            <ImageButton
+                                android:id="@+id/totalTimeInfoButton"
+                                android:layout_width="28dp"
+                                android:layout_height="28dp"
+                                android:layout_marginStart="2dp"
+                                android:background="?attr/selectableItemBackgroundBorderless"
+                                android:contentDescription="@string/planned_time_info"
+                                android:padding="4dp"
+                                android:scaleType="centerInside"
+                                android:src="@drawable/ic_info"
+                                app:tint="@color/brand" />
+
+                            <TextView
+                                android:id="@+id/totalText"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:autoSizeMaxTextSize="18sp"
+                                android:autoSizeMinTextSize="14sp"
+                                android:autoSizeStepGranularity="1sp"
+                                android:autoSizeTextType="uniform"
+                                android:gravity="end"
+                                android:maxLines="1"
+                                android:text="0m"
+                                android:textColor="@color/brand"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:text="@string/total_time" />
+                            android:layout_marginTop="4dp"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                style="@style/Tracker.Muted"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:maxLines="1"
+                                android:text="@string/actual_time_compact"
+                                android:textSize="12sp" />
+
+                            <TextView
+                                android:id="@+id/actualTotalText"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:autoSizeMaxTextSize="18sp"
+                                android:autoSizeMinTextSize="14sp"
+                                android:autoSizeStepGranularity="1sp"
+                                android:autoSizeTextType="uniform"
+                                android:gravity="end"
+                                android:maxLines="1"
+                                android:text="0m"
+                                android:textColor="@color/brand"
+                                android:textStyle="bold" />
+                        </LinearLayout>
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
             </LinearLayout>

@@ -49,7 +49,8 @@ data class Activity(
     val plannedMin: Int?,
     val actualMin: Int?,
     val priority: String,
-    val status: String
+    val status: String,
+    val reminderAt: String? = null
 ) {
     /** Used to warn about accidental duplicates. */
     fun fingerprint(): String =
@@ -64,6 +65,7 @@ data class Activity(
         put("actualMin", actualMin ?: JSONObject.NULL)
         put("priority", priority)
         put("status", status)
+        put("reminderAt", reminderAt ?: JSONObject.NULL)
     }
 
     companion object {
@@ -75,7 +77,8 @@ data class Activity(
             plannedMin = if (o.isNull("plannedMin")) null else o.optInt("plannedMin"),
             actualMin = if (o.isNull("actualMin")) null else o.optInt("actualMin"),
             priority = o.optString("priority", "Medium"),
-            status = o.optString("status", "Planned")
+            status = o.optString("status", "Planned"),
+            reminderAt = if (o.isNull("reminderAt")) null else o.optString("reminderAt").takeIf { it.isNotBlank() }
         )
     }
 }

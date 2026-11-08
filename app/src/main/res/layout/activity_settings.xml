@@ -81,5 +81,66 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="14dp"
             android:textSize="15sp" />
+
+        <TextView
+            style="@style/Tracker.Heading"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="22dp"
+            android:text="@string/daily_reminder_title"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <TextView
+            style="@style/Tracker.Muted"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/daily_reminder_description" />
+
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/dailyReminderSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:checked="true"
+            android:text="@string/daily_reminder_enabled" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/bedtimeButton"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_marginEnd="6dp"
+                android:layout_weight="1"
+                android:insetLeft="0dp"
+                android:insetRight="0dp"
+                android:maxLines="1"
+                android:paddingLeft="4dp"
+                android:paddingRight="4dp"
+                android:textSize="12sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/saveBedtimeButton"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:insetLeft="0dp"
+                android:insetRight="0dp"
+                android:maxLines="1"
+                android:paddingLeft="4dp"
+                android:paddingRight="4dp"
+                android:text="@string/save_bedtime_reminder"
+                android:textSize="12sp" />
+        </LinearLayout>
     </LinearLayout>
 </ScrollView>

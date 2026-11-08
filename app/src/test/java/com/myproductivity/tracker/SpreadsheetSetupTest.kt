@@ -76,7 +76,7 @@ class SpreadsheetSetupTest {
         assertTrue(activities.contains("<dataValidations count=\"3\">"))
         assertTrue(activities.contains("Career &amp; Learning"))
         assertTrue(activities.contains("conditionalFormatting"))
-        assertTrue(activities.contains("""<autoFilter ref="A1:M1000"/>"""))
+        assertTrue(activities.contains("""<autoFilter ref="A1:N1000"/>"""))
         assertTrue(activities.contains("""state="frozen""""))
         assertFalse(activities.contains("REPLACE_WITH"))
     }

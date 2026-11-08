@@ -6,6 +6,8 @@ import android.os.Bundle
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
+import android.widget.SeekBar
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.myproductivity.tracker.databinding.ActivityEditBinding
@@ -15,6 +17,7 @@ import org.json.JSONObject
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.ceil
 
 class EditActivity : AppCompatActivity() {
 
@@ -26,7 +29,27 @@ class EditActivity : AppCompatActivity() {
     private var selectedCategory: String = ""
     private var selectedPriority: String = Config.PRIORITIES[1]
     private var selectedStatus: String = Config.STATUS_PLANNED
+    private var reminderEnabled = true
+    private var reminderDelayMinutes = 60
     private var saving = false
+    private var allowReminderScheduling = true
+    private var pendingUpdatedActivity: Activity? = null
+
+    private val notificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            allowReminderScheduling = granted
+            val updated = pendingUpdatedActivity
+            pendingUpdatedActivity = null
+            updated?.let {
+                if (granted) continueUpdate(it) else persistUpdate(it)
+            }
+        }
+
+    private val exactAlarmPermission =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            pendingUpdatedActivity?.let(::persistUpdate)
+            pendingUpdatedActivity = null
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -48,6 +71,13 @@ class EditActivity : AppCompatActivity() {
         selectedCategory = original.category
         selectedPriority = original.priority
         selectedStatus = original.status
+        val existingReminder = ReminderStore(this).find(original.clientId)
+        reminderEnabled = original.status != Config.STATUS_COMPLETED
+        reminderDelayMinutes = existingReminder?.let {
+            val remainingMillis = (it.triggerAtMillis - System.currentTimeMillis()).coerceAtLeast(60_000L)
+            ceil(remainingMillis / 60_000.0).toInt().coerceIn(1, 720)
+        } ?: original.reminderAt?.let(ReminderScheduler::minutesUntilReminder)
+            ?: ReminderScheduler.defaultDelayMinutes(original.priority)
         store = PendingStore(this)
         api = SheetsApi(SecureSettings(this))
 
@@ -68,7 +98,30 @@ class EditActivity : AppCompatActivity() {
         binding.statusSpinner.setSelection(Config.STATUSES.indexOf(selectedStatus).coerceAtLeast(0))
         binding.categorySpinner.onItemSelectedListener = spinnerListener { selectedCategory = categories[it] }
         binding.prioritySpinner.onItemSelectedListener = spinnerListener { selectedPriority = Config.PRIORITIES[it] }
-        binding.statusSpinner.onItemSelectedListener = spinnerListener { selectedStatus = Config.STATUSES[it] }
+        binding.statusSpinner.onItemSelectedListener = spinnerListener {
+            selectedStatus = Config.STATUSES[it]
+            if (selectedStatus == Config.STATUS_COMPLETED) {
+                reminderEnabled = false
+                binding.activityReminderSwitch.isChecked = false
+            }
+            updateReminderControls()
+        }
+        binding.activityReminderSwitch.isChecked = reminderEnabled
+        binding.reminderDelaySeekBar.progress = reminderDelayMinutes - 1
+        binding.activityReminderSwitch.setOnCheckedChangeListener { _, checked ->
+            reminderEnabled = checked
+            updateReminderControls()
+        }
+        binding.reminderDelaySeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                reminderDelayMinutes = ReminderScheduler.delayForSeekProgress(progress)
+                updateReminderLabel()
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+            override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+        })
+        updateReminderControls()
         binding.dateButton.setOnClickListener { chooseDate() }
         binding.updateButton.setOnClickListener { update() }
         updateDateLabel()
@@ -96,32 +149,80 @@ class EditActivity : AppCompatActivity() {
             priority = selectedPriority,
             status = selectedStatus
         )
+        if (reminderEnabled && selectedStatus != Config.STATUS_COMPLETED &&
+            android.os.Build.VERSION.SDK_INT >= 33 &&
+            !ReminderScheduler.notificationsAllowed(this)
+        ) {
+            pendingUpdatedActivity = updated
+            notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            return
+        }
+        continueUpdate(updated)
+    }
+
+    private fun continueUpdate(updated: Activity) {
+        if (reminderEnabled && selectedStatus != Config.STATUS_COMPLETED &&
+            android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
+            !ReminderScheduler.canScheduleExactAlarms(this)
+        ) {
+            pendingUpdatedActivity = updated
+            exactAlarmPermission.launch(
+                Intent(
+                    android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                    android.net.Uri.parse("package:$packageName")
+                )
+            )
+            return
+        }
+        persistUpdate(updated)
+    }
+
+    private fun persistUpdate(updated: Activity) {
+        if (saving) return
+        val activityWithReminder = ReminderScheduler.updateActivity(
+            this,
+            original.clientId,
+            updated,
+            reminderDelayMinutes.takeIf { allowReminderScheduling && reminderEnabled }
+        )
         saving = true
         binding.updateButton.isEnabled = false
         binding.editStatus.text = getString(R.string.updating_activity)
         lifecycleScope.launch {
             try {
-                if (store.updateActivity(updated) == null) {
-                    if (updated.clientId.isBlank()) throw ApiException("This activity has no sheet ID.", false)
+                if (store.updateActivity(activityWithReminder) == null) {
+                    if (activityWithReminder.clientId.isBlank()) throw ApiException("This activity has no sheet ID.", false)
                     store.addAll(
                         listOf(
                             PendingItem(
-                                activity = updated,
-                                serverId = updated.clientId,
+                                activity = activityWithReminder,
+                                serverId = activityWithReminder.clientId,
                                 timeLogged = true,
                                 activityUpdated = false
                             )
                         )
                     )
                 }
-                val result = SaveCoordinator(api, store).flush()
+                val result = SaveCoordinator(api, store, this@EditActivity).flush()
                 if (result.stillPending == 0) {
-                    finishWithResult(getString(R.string.activity_updated), true)
+                    val message = if (reminderEnabled && !ReminderScheduler.notificationsAllowed(this@EditActivity)) {
+                        "${getString(R.string.activity_updated)} Allow notifications in Android settings to receive reminders."
+                    } else if (reminderEnabled && !ReminderScheduler.canScheduleExactAlarms(this@EditActivity)) {
+                        "${getString(R.string.activity_updated)} Enable Alarms & reminders for this app in Android settings for reminders at the selected time."
+                    } else {
+                        getString(R.string.activity_updated)
+                    }
+                    finishWithResult(message, true)
                 } else {
-                    finishWithResult(
-                        getString(R.string.activity_update_pending, result.firstError ?: "Unable to reach the sheet."),
-                        false
-                    )
+                    val message = getString(
+                        R.string.activity_update_pending,
+                        result.firstError ?: "Unable to reach the sheet."
+                    ) + if (!allowReminderScheduling && reminderEnabled) {
+                        " Allow notifications in Android settings to receive reminders."
+                    } else {
+                        ""
+                    }
+                    finishWithResult(message, false)
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -151,6 +252,26 @@ class EditActivity : AppCompatActivity() {
             R.string.start_date_label,
             selectedDate.format(DateTimeFormatter.ofPattern("EEE, d MMM yyyy", Locale.ENGLISH))
         )
+    }
+
+    private fun updateReminderControls() {
+        val enabled = reminderEnabled && selectedStatus != Config.STATUS_COMPLETED
+        binding.activityReminderSwitch.isEnabled = selectedStatus != Config.STATUS_COMPLETED
+        binding.reminderDelaySeekBar.isEnabled = enabled
+        updateReminderLabel()
+    }
+
+    private fun updateReminderLabel() {
+        val reminderAt = java.time.Instant.ofEpochMilli(
+            System.currentTimeMillis() + reminderDelayMinutes * 60_000L
+        ).atZone(Config.ZONE)
+        binding.reminderTimeLabel.text = getString(
+            R.string.reminder_in_at_time,
+            ReminderScheduler.formatDelay(reminderDelayMinutes),
+            reminderAt.format(DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH))
+        )
+        binding.reminderTimeLabel.visibility =
+            if (reminderEnabled && selectedStatus != Config.STATUS_COMPLETED) View.VISIBLE else View.GONE
     }
 
     private fun parseMinutes(value: String): Int? {

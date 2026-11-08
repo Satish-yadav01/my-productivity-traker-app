@@ -54,20 +54,9 @@
                 android:orientation="horizontal">
 
                 <com.google.android.material.button.MaterialButton
-                    android:id="@+id/retryMicButton"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                    android:layout_width="0dp"
-                    android:layout_height="52dp"
-                    android:layout_marginEnd="6dp"
-                    android:layout_weight="1"
-                    android:text="@string/retry_mic" />
-
-                <com.google.android.material.button.MaterialButton
                     android:id="@+id/understandButton"
-                    android:layout_width="0dp"
+                    android:layout_width="match_parent"
                     android:layout_height="52dp"
-                    android:layout_marginStart="6dp"
-                    android:layout_weight="1"
                     android:text="@string/understand" />
             </LinearLayout>
 
