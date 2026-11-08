@@ -8,3 +8,4 @@
 *.jks
 *.keystore
 secrets.properties
+apps-script/code-bkp.gs
