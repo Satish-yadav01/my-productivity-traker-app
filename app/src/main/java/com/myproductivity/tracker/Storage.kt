@@ -95,6 +95,20 @@ class PendingStore(context: Context) {
         updated
     }
 
+    fun updateStatus(activityId: String, status: String): Boolean = synchronized(lock) {
+        val items = load()
+        val current = items.firstOrNull {
+            it.activity.clientId == activityId || it.serverId == activityId
+        } ?: return false
+        val updated = current.copy(
+            activity = current.activity.copy(status = status),
+            statusSet = false,
+            activityUpdated = current.serverId == null
+        )
+        write(items.map { if (it.activity.clientId == current.activity.clientId) updated else it })
+        true
+    }
+
     fun remove(clientId: String) = synchronized(lock) {
         write(load().filterNot { it.activity.clientId == clientId })
     }

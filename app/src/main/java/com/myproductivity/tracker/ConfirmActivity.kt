@@ -180,14 +180,26 @@ class ConfirmActivity : AppCompatActivity(), SpeechController.Listener {
         binding.listenStatus.visibility = View.GONE
         drafts.clear()
         binding.draftContainer.removeAllViews()
-        parsed.forEach { addDraft(it) }
+        val defaultDate = intent.getStringExtra(EXTRA_DEFAULT_DATE)
+            ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        parsed.forEach { activity ->
+            addDraft(
+                if (defaultDate != null && activity.date == Config.today()) activity.copy(date = defaultDate)
+                else activity
+            )
+        }
     }
 
     private fun blankParsed() = ParsedActivity(
-        name = "", category = null, date = Config.today(), plannedMin = null, actualMin = null,
+        name = "", category = null, date = defaultPlanDate(), plannedMin = null, actualMin = null,
         priority = "Medium", status = Config.STATUS_COMPLETED,
         issues = listOf(Issue("name", "Type the activity name.", true))
     )
+
+    private fun defaultPlanDate(): LocalDate =
+        intent.getStringExtra(EXTRA_DEFAULT_DATE)
+            ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+            ?: Config.today()
 
     private fun addDraft(p: ParsedActivity) {
         val d = Draft(p)
@@ -263,10 +275,15 @@ class ConfirmActivity : AppCompatActivity(), SpeechController.Listener {
         if (saving) return
         val activities = drafts.map { draft ->
             val activity = draft.toActivity()
-            if (allowReminderScheduling && draft.reminderEnabled &&
+            if (draft.reminderEnabled &&
                 draft.status != Config.STATUS_COMPLETED
             ) {
-                ReminderScheduler.scheduleActivity(this, activity, draft.reminderDelayMinutes)
+                ReminderScheduler.scheduleActivity(
+                    this,
+                    activity,
+                    draft.reminderDelayMinutes,
+                    scheduleLocally = allowReminderScheduling
+                )
             } else {
                 activity.copy(reminderAt = null)
             }
@@ -306,7 +323,15 @@ class ConfirmActivity : AppCompatActivity(), SpeechController.Listener {
             ) {
                 message += " Enable Alarms & reminders for this app in Android settings for reminders at the selected time."
             }
-            setResult(RESULT_OK, Intent().putExtra(EXTRA_MESSAGE, message).putExtra(EXTRA_SUCCESS, ok))
+            val completedNames = drafts
+                .filter { it.status == Config.STATUS_COMPLETED }
+                .map { it.name() }
+            setResult(
+                RESULT_OK,
+                Intent().putExtra(EXTRA_MESSAGE, message)
+                    .putExtra(EXTRA_SUCCESS, ok)
+                    .putExtra(EXTRA_COMPLETED_NAMES, completedNames.toTypedArray())
+            )
             finish()
         }
     }
@@ -321,13 +346,13 @@ class ConfirmActivity : AppCompatActivity(), SpeechController.Listener {
         var status: String = p.status
         var priority: String = p.priority
         var reminderEnabled = p.status != Config.STATUS_COMPLETED
-        var reminderDelayMinutes = ReminderScheduler.defaultDelayMinutes(p.priority)
+        var reminderDelayMinutes = ReminderScheduler.defaultDelayMinutes()
         private var reminderDelayManuallyChanged = false
         var duplicate = false
         private val issues = p.issues.toMutableList()
 
         init {
-            b.nameInput.setText(p.name)
+            b.nameInput.setText(p.name.capitalizeWords())
             b.plannedInput.setText(p.plannedMin?.toString() ?: "")
             b.actualInput.setText(p.actualMin?.toString() ?: "")
             updateDateLabel()
@@ -367,14 +392,14 @@ class ConfirmActivity : AppCompatActivity(), SpeechController.Listener {
                 if (nextPriority != priority) {
                     priority = nextPriority
                     if (!reminderDelayManuallyChanged) {
-                        reminderDelayMinutes = ReminderScheduler.defaultDelayMinutes(priority)
+                        reminderDelayMinutes = ReminderScheduler.defaultDelayMinutes()
                         b.reminderDelaySeekBar.progress = reminderDelayMinutes - 1
                         updateReminderLabel()
                     }
                 }
             }
             b.activityReminderSwitch.isChecked = reminderEnabled
-            b.reminderDelaySeekBar.progress = reminderDelayMinutes / 15 - 1
+            b.reminderDelaySeekBar.progress = reminderDelayMinutes - 1
             b.activityReminderSwitch.setOnCheckedChangeListener { _, checked ->
                 reminderEnabled = checked
                 updateReminderControls()
@@ -415,7 +440,7 @@ class ConfirmActivity : AppCompatActivity(), SpeechController.Listener {
             renderIssues()
         }
 
-        fun name() = b.nameInput.text?.toString()?.trim().orEmpty()
+        fun name() = b.nameInput.text?.toString()?.trim().orEmpty().capitalizeWords()
         private fun minutes(raw: CharSequence?): Int? = raw?.toString()?.trim()?.toIntOrNull()
         private fun minutesOk(raw: CharSequence?): Boolean {
             val s = raw?.toString()?.trim().orEmpty()
@@ -466,13 +491,10 @@ class ConfirmActivity : AppCompatActivity(), SpeechController.Listener {
         }
 
         private fun updateReminderLabel() {
-            val reminderAt = java.time.Instant.ofEpochMilli(
-                System.currentTimeMillis() + reminderDelayMinutes * 60_000L
-            ).atZone(Config.ZONE)
             b.reminderTimeLabel.text = getString(
                 R.string.reminder_in_at_time,
                 ReminderScheduler.formatDelay(reminderDelayMinutes),
-                reminderAt.format(DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH))
+                ReminderScheduler.reminderPreview(date.toString(), reminderDelayMinutes)
             )
             b.reminderTimeLabel.visibility =
                 if (reminderEnabled && status != Config.STATUS_COMPLETED) View.VISIBLE else View.GONE
@@ -495,7 +517,9 @@ class ConfirmActivity : AppCompatActivity(), SpeechController.Listener {
 
     companion object {
         const val EXTRA_AUTO_LISTEN = "autoListen"
+        const val EXTRA_DEFAULT_DATE = "defaultDate"
         const val EXTRA_MESSAGE = "message"
         const val EXTRA_SUCCESS = "success"
+        const val EXTRA_COMPLETED_NAMES = "completedNames"
     }
 }

@@ -13,6 +13,7 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.time.Instant
+import java.util.Locale
 
 /**
  * Matches the existing Productivity-tracker Apps Script (Code.gs):
@@ -95,6 +96,48 @@ class SheetsApi(private val settings: SecureSettings) {
         return null
     }
 
+    suspend fun resolveActivityId(
+        clientId: String,
+        title: String,
+        date: String,
+        triggerAtMillis: Long
+    ): String {
+        val candidateDates = if (date.isNotBlank()) {
+            listOf(java.time.LocalDate.parse(date))
+        } else {
+            val triggerDate = Instant.ofEpochMilli(triggerAtMillis).atZone(Config.ZONE).toLocalDate()
+            (listOf(Config.today(), triggerDate).flatMap { day ->
+                listOf(day.minusDays(1), day, day.plusDays(1))
+            }).distinct()
+        }
+        val rowsByDate = candidateDates.associateWith { rawDay(it.toString()) }
+        val marked = rowsByDate.values.flatMap { rows ->
+            (0 until rows.length()).map { rows.getJSONObject(it) }
+        }.filter { it.optString("notes").contains(clientId) }
+        val markedIds = marked.map { it.optString("activity_id") }.filter { it.isNotBlank() }.distinct()
+        if (markedIds.size == 1) return markedIds.single()
+        if (markedIds.size > 1) {
+            throw ApiException("More than one spreadsheet row matches this reminder. Open the activity list to update it safely.", false)
+        }
+
+        val normalizedTitle = title.trim().lowercase(Locale.ROOT)
+        val titleMatches = rowsByDate.values.flatMap { rows ->
+            (0 until rows.length()).map { rows.getJSONObject(it) }
+        }.filter { it.optString("activity").trim().lowercase(Locale.ROOT) == normalizedTitle }
+        val titleIds = titleMatches.map { it.optString("activity_id") }.filter { it.isNotBlank() }.distinct()
+        return when (titleIds.size) {
+            1 -> titleIds.single()
+            0 -> throw ApiException(
+                "Could not find “$title” in Google Sheets. Sync or save the activity in the app, then try again.",
+                false
+            )
+            else -> throw ApiException(
+                "Several spreadsheet activities are named “$title”. Open the activity list to update the correct one.",
+                false
+            )
+        }
+    }
+
     /** Appends to Time_Log and adds the minutes to the activity's Actual_Duration_Min. */
     suspend fun logTime(serverId: String, a: Activity) {
         val f = JSONObject()
@@ -114,9 +157,17 @@ class SheetsApi(private val settings: SecureSettings) {
     }
 
     suspend fun markInProgress(serverId: String) {
+        updateStatus(serverId, Config.STATUS_IN_PROGRESS)
+    }
+
+    suspend fun markPlanned(serverId: String) {
+        updateStatus(serverId, Config.STATUS_PLANNED)
+    }
+
+    suspend fun updateStatus(serverId: String, status: String) {
         call(
             ApiContract.ACTION_UPDATE,
-            JSONObject().put("activity_id", serverId).put("status", Config.STATUS_IN_PROGRESS)
+            JSONObject().put("activity_id", serverId).put("status", status)
         )
     }
 
@@ -149,7 +200,7 @@ class SheetsApi(private val settings: SecureSettings) {
         }
         return Activity(
             clientId = o.optString("activity_id"),
-            name = o.optString("activity"),
+            name = o.optString("activity").capitalizeWords(),
             category = o.optString("category"),
             date = normalizeDate(o.opt("date")),
             plannedMin = mins("planned_duration_min"),
@@ -322,6 +373,7 @@ class SaveCoordinator(
                     when (cur.activity.status) {
                         Config.STATUS_COMPLETED -> api.markCompleted(id)
                         Config.STATUS_IN_PROGRESS -> api.markInProgress(id)
+                        Config.STATUS_PLANNED -> api.markPlanned(id)
                     }
                     cur = cur.copy(statusSet = true, lastError = null)
                     store.update(cur)

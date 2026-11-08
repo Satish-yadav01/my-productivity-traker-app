@@ -10,10 +10,10 @@
     <string name="load_activities">Load activities</string>
     <string name="edit_activity_title">Edit activity</string>
     <string name="activity_reminder">Remind me about this activity</string>
-    <string name="reminder_in_at_time">Reminder in %1$s · around %2$s</string>
+    <string name="reminder_in_at_time">Reminder in %1$s · %2$s</string>
     <string name="daily_reminder_title">Daily reminder</string>
-    <string name="daily_reminder_description">Get a summary of today’s planned and in-progress activities two hours before bedtime.</string>
-    <string name="daily_reminder_enabled">Remind me before bedtime</string>
+    <string name="daily_reminder_description">Get a reminder to plan tomorrow one hour before bedtime.</string>
+    <string name="daily_reminder_enabled">Remind me to plan tomorrow before bedtime</string>
     <string name="bedtime_time">Bedtime: %1$d:%2$s %3$s</string>
     <string name="save_bedtime_reminder">Save bedtime reminder</string>
     <string name="activity_name">Activity name</string>
@@ -26,7 +26,7 @@
     <string name="edit_activity">Edit activity</string>
     <string name="delete_activity">Delete activity</string>
     <string name="delete_activity_title">Delete activity?</string>
-    <string name="delete_activity_confirmation">Delete “%1$s” from today and the spreadsheet? This cannot be undone.</string>
+    <string name="delete_activity_confirmation">Delete “%1$s” from your activity list and the spreadsheet? This cannot be undone.</string>
     <string name="activity_deleted">Activity deleted.</string>
     <string name="delete_failed">Could not delete the activity.</string>
     <string name="cancel">Cancel</string>
@@ -130,6 +130,9 @@
     <string name="type_instead">Type instead</string>
     <string name="today_list">Today\'s activities</string>
     <string name="empty_today">Nothing recorded yet.\nTap the microphone and say what you did.</string>
+    <string name="tomorrows_activities">Tomorrow\'s plan</string>
+    <string name="plan_tomorrow">Plan tomorrow</string>
+    <string name="empty_tomorrow">Nothing planned for tomorrow yet.</string>
     <string name="settings">Settings</string>
     <string name="not_configured">Connect your Google Sheet in Settings to start.</string>
     <string name="pending_banner">%1$d activity waiting to upload — tap to retry</string>

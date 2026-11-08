@@ -1,6 +1,8 @@
 package com.myproductivity.tracker
 
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import android.os.Bundle
 import android.view.View
 import androidx.appcompat.app.AlertDialog
@@ -25,9 +27,19 @@ class TodayFragment : Fragment(R.layout.fragment_today) {
     private lateinit var settings: SecureSettings
     private lateinit var store: PendingStore
     private lateinit var cache: TodayCache
+    private lateinit var reportCache: ReportCache
     private lateinit var api: SheetsApi
     private lateinit var coordinator: SaveCoordinator
     private var refreshJob: Job? = null
+    private val rolloverHandler = Handler(Looper.getMainLooper())
+    private val dayRollover = object : Runnable {
+        override fun run() {
+            if (_binding == null) return
+            renderFromLocal()
+            refresh()
+            scheduleDayRollover()
+        }
+    }
 
     private val confirmLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -37,6 +49,16 @@ class TodayFragment : Fragment(R.layout.fragment_today) {
                 Snackbar.make(binding.root, msg, if (ok) Snackbar.LENGTH_LONG else Snackbar.LENGTH_INDEFINITE)
                     .apply { if (!ok) setAction("OK") { dismiss() } }
                     .show()
+                val completed = result.data?.getStringArrayExtra(ConfirmActivity.EXTRA_COMPLETED_NAMES)
+                    ?.filter { it.isNotBlank() }
+                    .orEmpty()
+                if (ok && completed.isNotEmpty()) {
+                    CompletionCelebration.show(
+                        requireContext(),
+                        requireActivity().findViewById(android.R.id.content),
+                        completed.joinToString(", ")
+                    )
+                }
             }
             refresh()
         }
@@ -49,6 +71,13 @@ class TodayFragment : Fragment(R.layout.fragment_today) {
                 Snackbar.make(binding.root, msg, if (ok) Snackbar.LENGTH_LONG else Snackbar.LENGTH_INDEFINITE)
                     .apply { if (!ok) setAction("OK") { dismiss() } }
                     .show()
+                if (ok && result.data?.getBooleanExtra(EditActivity.EXTRA_COMPLETED, false) == true) {
+                    CompletionCelebration.show(
+                        requireContext(),
+                        requireActivity().findViewById(android.R.id.content),
+                        result.data?.getStringExtra(EditActivity.EXTRA_COMPLETED_NAME).orEmpty()
+                    )
+                }
             }
             refresh()
         }
@@ -58,11 +87,15 @@ class TodayFragment : Fragment(R.layout.fragment_today) {
         settings = SecureSettings(requireContext())
         store = PendingStore(requireContext())
         cache = TodayCache(requireContext())
+        reportCache = ReportCache(requireContext())
         api = SheetsApi(settings)
         coordinator = SaveCoordinator(api, store, requireContext())
 
         binding.micButton.setOnClickListener { openConfirm(autoListen = true) }
         binding.typeButton.setOnClickListener { openConfirm(autoListen = false) }
+        binding.tomorrowPlanButton.setOnClickListener {
+            openConfirm(autoListen = false, defaultDate = Config.today().plusDays(1))
+        }
         binding.settingsButton.setOnClickListener {
             startActivity(Intent(requireContext(), SettingsActivity::class.java))
         }
@@ -84,33 +117,65 @@ class TodayFragment : Fragment(R.layout.fragment_today) {
         if (_binding != null) {
             renderFromLocal()
             refresh()
+            scheduleDayRollover()
         }
     }
 
+    override fun onPause() {
+        rolloverHandler.removeCallbacks(dayRollover)
+        super.onPause()
+    }
+
     override fun onDestroyView() {
+        rolloverHandler.removeCallbacks(dayRollover)
         refreshJob?.cancel()
         _binding = null
         super.onDestroyView()
     }
 
     private fun openConfirm(autoListen: Boolean) {
+        openConfirm(autoListen, null)
+    }
+
+    private fun scheduleDayRollover() {
+        rolloverHandler.removeCallbacks(dayRollover)
+        val nextMidnight = Config.today().plusDays(1).atStartOfDay(Config.ZONE)
+            .toInstant().toEpochMilli()
+        rolloverHandler.postDelayed(dayRollover, (nextMidnight - System.currentTimeMillis() + 1_000L).coerceAtLeast(1_000L))
+    }
+
+    private fun openConfirm(autoListen: Boolean, defaultDate: LocalDate?) {
         confirmLauncher.launch(
             Intent(requireContext(), ConfirmActivity::class.java)
                 .putExtra(ConfirmActivity.EXTRA_AUTO_LISTEN, autoListen)
+                .putExtra(ConfirmActivity.EXTRA_DEFAULT_DATE, defaultDate?.toString())
         )
     }
 
     private fun renderFromLocal() {
         val today = Config.today().toString()
+        val tomorrow = Config.today().plusDays(1).toString()
         val cached = cache.load(today)
-        val list = (cached?.first ?: emptyList()) + pendingFor(today, onlyUnadded = false)
-        render(list, if (cached != null) "Last synced ${clock(cached.second)}" else "Not synced yet")
+        val tomorrowDate = LocalDate.parse(tomorrow)
+        render(
+            mergeCachedAndPending(cached?.first.orEmpty(), pendingFor(today, onlyUnadded = false)),
+            mergeCachedAndPending(
+                reportCache.getRange(tomorrowDate, tomorrowDate),
+                pendingFor(tomorrow, onlyUnadded = false)
+            ),
+            if (cached != null) "Last synced ${clock(cached.second)}" else "Not synced yet"
+        )
     }
 
     private fun pendingFor(date: String, onlyUnadded: Boolean): List<Activity> =
         store.load()
             .filter { it.activity.date == date && (!onlyUnadded || it.serverId == null) }
             .map { it.activity }
+
+    private fun mergeCachedAndPending(cached: List<Activity>, pending: List<Activity>): List<Activity> {
+        val pendingIds = pending.map { it.clientId }.toSet()
+        return (cached.filterNot { it.clientId in pendingIds } + pending).distinctBy { it.clientId }
+    }
 
     private fun refresh() {
         if (!settings.isConfigured) {
@@ -122,16 +187,29 @@ class TodayFragment : Fragment(R.layout.fragment_today) {
         refreshJob = viewLifecycleOwner.lifecycleScope.launch {
             binding.refresh.isRefreshing = true
             val today = Config.today().toString()
+            val tomorrow = Config.today().plusDays(1).toString()
             try {
                 if (store.load().isNotEmpty()) coordinator.flush()
-                val server = api.getToday(today)
+                val dates = api.getDates(listOf(LocalDate.parse(today), LocalDate.parse(tomorrow)))
+                val server = dates[today].orEmpty()
+                val tomorrowServer = dates[tomorrow].orEmpty()
                 val now = System.currentTimeMillis()
                 cache.save(today, server, now)
-                render(server + pendingFor(today, onlyUnadded = true), "Synced ${clock(now)}")
+                reportCache.save(mapOf(today to server, tomorrow to tomorrowServer))
+                render(
+                    mergeCachedAndPending(server, pendingFor(today, onlyUnadded = true)),
+                    mergeCachedAndPending(tomorrowServer, pendingFor(tomorrow, onlyUnadded = true)),
+                    "Synced ${clock(now)}"
+                )
             } catch (e: ApiException) {
                 val cached = cache.load(today)
+                val tomorrowDate = LocalDate.parse(tomorrow)
                 render(
-                    (cached?.first ?: emptyList()) + pendingFor(today, onlyUnadded = false),
+                    mergeCachedAndPending(cached?.first.orEmpty(), pendingFor(today, onlyUnadded = false)),
+                    mergeCachedAndPending(
+                        reportCache.getRange(tomorrowDate, tomorrowDate),
+                        pendingFor(tomorrow, onlyUnadded = false)
+                    ),
                     "Offline — ${e.message}"
                 )
             } finally {
@@ -140,7 +218,7 @@ class TodayFragment : Fragment(R.layout.fragment_today) {
         }
     }
 
-    private fun render(list: List<Activity>, syncText: String) {
+    private fun render(list: List<Activity>, tomorrowList: List<Activity>, syncText: String) {
         binding.dateText.text = Config.today().format(DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.ENGLISH))
         binding.syncText.text = syncText
         binding.countText.text = list.size.toString()
@@ -156,12 +234,31 @@ class TodayFragment : Fragment(R.layout.fragment_today) {
             if (it == "—") "0m" else it
         }
 
-        val pendingItems = store.load()
-        val pendingIds = pendingItems.flatMap { listOfNotNull(it.activity.clientId, it.serverId) }.toSet()
+        val pendingIds = store.load().flatMap { listOfNotNull(it.activity.clientId, it.serverId) }.toSet()
         val activityReminders = ReminderStore(requireContext()).all()
-        binding.listContainer.removeAllViews()
-        for (activity in list) {
-            val item = ItemActivityBinding.inflate(layoutInflater, binding.listContainer, false)
+        renderActivityList(binding.listContainer, list, pendingIds, activityReminders)
+        renderActivityList(binding.tomorrowListContainer, tomorrowList, pendingIds, activityReminders)
+        binding.emptyText.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
+        binding.tomorrowEmptyText.visibility = if (tomorrowList.isEmpty()) View.VISIBLE else View.GONE
+
+        val waiting = store.load().size
+        when {
+            !settings.isConfigured -> showBanner(getString(R.string.not_configured))
+            waiting == 1 -> showBanner(getString(R.string.pending_banner, waiting))
+            waiting > 1 -> showBanner(getString(R.string.pending_banner_plural, waiting))
+            else -> binding.banner.visibility = View.GONE
+        }
+    }
+
+    private fun renderActivityList(
+        container: android.widget.LinearLayout,
+        activities: List<Activity>,
+        pendingIds: Set<String>,
+        activityReminders: List<ActivityReminder>
+    ) {
+        container.removeAllViews()
+        for (activity in activities) {
+            val item = ItemActivityBinding.inflate(layoutInflater, container, false)
             item.itemName.text = activity.name
             item.root.setCardBackgroundColor(requireContext().getColor(statusBackgroundColor(activity.status)))
             val isPending = activity.clientId in pendingIds
@@ -211,16 +308,7 @@ class TodayFragment : Fragment(R.layout.fragment_today) {
             item.deleteButton.setOnClickListener {
                 confirmDelete(activity, item.deleteButton)
             }
-            binding.listContainer.addView(item.root)
-        }
-        binding.emptyText.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
-
-        val waiting = store.load().size
-        when {
-            !settings.isConfigured -> showBanner(getString(R.string.not_configured))
-            waiting == 1 -> showBanner(getString(R.string.pending_banner, waiting))
-            waiting > 1 -> showBanner(getString(R.string.pending_banner_plural, waiting))
-            else -> binding.banner.visibility = View.GONE
+            container.addView(item.root)
         }
     }
 

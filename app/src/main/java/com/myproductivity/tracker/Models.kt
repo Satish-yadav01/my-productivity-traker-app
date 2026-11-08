@@ -3,6 +3,7 @@ package com.myproductivity.tracker
 import org.json.JSONObject
 import java.time.LocalDate
 import java.time.ZoneId
+import java.util.Locale
 
 /** App-wide constants. Edit the lists here if your sheet uses different labels. */
 object Config {
@@ -71,7 +72,7 @@ data class Activity(
     companion object {
         fun fromJson(o: JSONObject) = Activity(
             clientId = o.optString("clientId", ""),
-            name = o.optString("name", ""),
+            name = o.optString("name", "").capitalizeWords(),
             category = o.optString("category", ""),
             date = o.optString("date", ""),
             plannedMin = if (o.isNull("plannedMin")) null else o.optInt("plannedMin"),
@@ -122,4 +123,11 @@ fun formatMinutes(min: Int?): String {
         m == 0 -> "$h hr"
         else -> "$h hr $m min"
     }
+}
+
+fun String.capitalizeWords(): String {
+    val firstLetterIndex = indexOfFirst(Char::isLetter)
+    if (firstLetterIndex < 0) return this
+    val firstLetter = this[firstLetterIndex].toString().uppercase(Locale.ROOT)
+    return replaceRange(firstLetterIndex, firstLetterIndex + 1, firstLetter)
 }

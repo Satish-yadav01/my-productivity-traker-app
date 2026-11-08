@@ -73,15 +73,15 @@ class EditActivity : AppCompatActivity() {
         selectedStatus = original.status
         val existingReminder = ReminderStore(this).find(original.clientId)
         reminderEnabled = original.status != Config.STATUS_COMPLETED
-        reminderDelayMinutes = existingReminder?.let {
+        reminderDelayMinutes = original.reminderAt?.let(ReminderScheduler::minutesUntilReminder)
+            ?: existingReminder?.let {
             val remainingMillis = (it.triggerAtMillis - System.currentTimeMillis()).coerceAtLeast(60_000L)
             ceil(remainingMillis / 60_000.0).toInt().coerceIn(1, 720)
-        } ?: original.reminderAt?.let(ReminderScheduler::minutesUntilReminder)
-            ?: ReminderScheduler.defaultDelayMinutes(original.priority)
+        } ?: ReminderScheduler.defaultDelayMinutes()
         store = PendingStore(this)
         api = SheetsApi(SecureSettings(this))
 
-        binding.nameInput.setText(original.name)
+        binding.nameInput.setText(original.name.capitalizeWords())
         binding.plannedInput.setText(original.plannedMin?.toString().orEmpty())
         binding.actualInput.setText(original.actualMin?.toString().orEmpty())
         val categories = buildList {
@@ -141,7 +141,7 @@ class EditActivity : AppCompatActivity() {
             return
         }
         val updated = original.copy(
-            name = name,
+            name = name.capitalizeWords(),
             category = selectedCategory,
             date = selectedDate.toString(),
             plannedMin = planned,
@@ -183,7 +183,8 @@ class EditActivity : AppCompatActivity() {
             this,
             original.clientId,
             updated,
-            reminderDelayMinutes.takeIf { allowReminderScheduling && reminderEnabled }
+            reminderDelayMinutes.takeIf { reminderEnabled && selectedStatus != Config.STATUS_COMPLETED },
+            scheduleLocally = allowReminderScheduling
         )
         saving = true
         binding.updateButton.isEnabled = false
@@ -205,6 +206,8 @@ class EditActivity : AppCompatActivity() {
                 }
                 val result = SaveCoordinator(api, store, this@EditActivity).flush()
                 if (result.stillPending == 0) {
+                    val newlyCompleted = original.status != Config.STATUS_COMPLETED &&
+                        activityWithReminder.status == Config.STATUS_COMPLETED
                     val message = if (reminderEnabled && !ReminderScheduler.notificationsAllowed(this@EditActivity)) {
                         "${getString(R.string.activity_updated)} Allow notifications in Android settings to receive reminders."
                     } else if (reminderEnabled && !ReminderScheduler.canScheduleExactAlarms(this@EditActivity)) {
@@ -212,7 +215,7 @@ class EditActivity : AppCompatActivity() {
                     } else {
                         getString(R.string.activity_updated)
                     }
-                    finishWithResult(message, true)
+                    finishWithResult(message, true, newlyCompleted)
                 } else {
                     val message = getString(
                         R.string.activity_update_pending,
@@ -262,13 +265,10 @@ class EditActivity : AppCompatActivity() {
     }
 
     private fun updateReminderLabel() {
-        val reminderAt = java.time.Instant.ofEpochMilli(
-            System.currentTimeMillis() + reminderDelayMinutes * 60_000L
-        ).atZone(Config.ZONE)
         binding.reminderTimeLabel.text = getString(
             R.string.reminder_in_at_time,
             ReminderScheduler.formatDelay(reminderDelayMinutes),
-            reminderAt.format(DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH))
+            ReminderScheduler.reminderPreview(selectedDate.toString(), reminderDelayMinutes)
         )
         binding.reminderTimeLabel.visibility =
             if (reminderEnabled && selectedStatus != Config.STATUS_COMPLETED) View.VISIBLE else View.GONE
@@ -290,10 +290,13 @@ class EditActivity : AppCompatActivity() {
             override fun onNothingSelected(parent: AdapterView<*>?) = Unit
         }
 
-    private fun finishWithResult(message: String, success: Boolean) {
+    private fun finishWithResult(message: String, success: Boolean, completed: Boolean = false) {
         setResult(
             RESULT_OK,
-            Intent().putExtra(EXTRA_MESSAGE, message).putExtra(EXTRA_SUCCESS, success)
+            Intent().putExtra(EXTRA_MESSAGE, message)
+                .putExtra(EXTRA_SUCCESS, success)
+                .putExtra(EXTRA_COMPLETED, completed)
+                .putExtra(EXTRA_COMPLETED_NAME, original.name)
         )
         finish()
     }
@@ -303,6 +306,8 @@ class EditActivity : AppCompatActivity() {
         const val EXTRA_PENDING = "pending"
         const val EXTRA_MESSAGE = "message"
         const val EXTRA_SUCCESS = "success"
+        const val EXTRA_COMPLETED = "completed"
+        const val EXTRA_COMPLETED_NAME = "completedName"
         private const val INVALID_MINUTES = -1
     }
 }
