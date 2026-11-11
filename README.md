@@ -36,9 +36,9 @@ Example: “Aaj 45 min gym kiya, then 1 hour Kotlin padha” can be turned into 
 ### Download a prebuilt APK from GitHub Actions
 
 1. Open this repository on GitHub and select **Actions**.
-2. Select the **Build APK** workflow and open a successful run.
+2. Select the **Build and release Android app** workflow and open a successful run.
 3. Under **Artifacts**, download `my-productivity-tracker-debug-apk`.
-4. Extract the downloaded archive and copy `app-debug.apk` to your Android phone.
+4. Extract the downloaded archive and copy `Daily Tracker.apk` to your Android phone.
 5. Open the APK on your phone. If Android asks, allow your browser or file manager to install unknown apps, then continue the installation.
 6. Launch **My Productivity Tracker** from your app list.
 
@@ -48,7 +48,13 @@ The workflow builds an APK when code is pushed to `main`; it can also be started
 
 1. Install Android Studio and open this repository folder.
 2. Let Gradle sync, then choose **Build → Build APK(s)**, or connect an Android device and press **Run**.
-3. The debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`.
+3. Run `./gradlew assembleDebug` from the repository folder. The APK is automatically saved as `app/build/outputs/daily-tracker/Daily Tracker.apk`.
+
+### Build a signed Google Play bundle
+
+Create a release keystore outside this repository and keep a secure offline backup. Add these values as GitHub Actions repository secrets: `ANDROID_KEYSTORE_BASE64` (the keystore file encoded as one base64 string), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`. Never commit the keystore or its passwords.
+
+Push a version tag such as `v1.1.0` to run the Play Store release job. The workflow verifies tests, release lint, and optimized APK packaging, then builds a signed Android App Bundle (`.aab`) with a CI-generated version code. Download `my-productivity-tracker-play-aab` from the workflow run and upload it to the Google Play Console. The workflow does not publish to Google Play automatically.
 
 ## Set up Google Sheets and Apps Script
 

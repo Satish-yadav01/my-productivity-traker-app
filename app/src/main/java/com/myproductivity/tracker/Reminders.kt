@@ -412,7 +412,11 @@ object ReminderScheduler {
             NotificationManagerCompat.from(context).areNotificationsEnabled()
 
     fun postStatusUpdateFailure(context: Context, reminder: ActivityReminder, message: String?) {
-        if (!notificationsAllowed(context)) return
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) return
+        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
         createChannels(context)
         NotificationManagerCompat.from(context).notify(
             reminder.activityId.hashCode() xor 0x40000000,
@@ -429,7 +433,11 @@ object ReminderScheduler {
     }
 
     fun postActivityCompleted(context: Context, reminder: ActivityReminder) {
-        if (!notificationsAllowed(context)) return
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) return
+        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
         createChannels(context)
         NotificationManagerCompat.from(context).notify(
             activityNotificationId(reminder),
@@ -606,6 +614,12 @@ class DailyReminderReceiver : BroadcastReceiver() {
 
 class ReminderBootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action !in setOf(
+                Intent.ACTION_BOOT_COMPLETED,
+                Intent.ACTION_TIME_CHANGED,
+                Intent.ACTION_TIMEZONE_CHANGED
+            )
+        ) return
         ReminderScheduler.scheduleAllActivities(context)
         ReminderScheduler.scheduleDaily(context)
     }
